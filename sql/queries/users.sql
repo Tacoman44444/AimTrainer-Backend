@@ -6,3 +6,8 @@ VALUES (
     $2,
     NOW()
 ) RETURNING *;
+
+-- name: FindUserByUsername :one
+SELECT id, hashed_password
+FROM users
+WHERE username = $1;
