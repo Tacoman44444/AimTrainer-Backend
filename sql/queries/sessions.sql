@@ -7,3 +7,9 @@ VALUES (
     NOW(),
     $3
 ) RETURNING *;
+
+-- name: GetPlayerBestSession :one
+SELECT * FROM sessions
+WHERE player_id = $1
+ORDER BY score DESC
+LIMIT 1;

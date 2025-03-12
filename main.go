@@ -7,10 +7,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/Tacoman44444/AimTrainer-Backend/internal/auth"
 	"github.com/Tacoman44444/AimTrainer-Backend/internal/database"
 	"github.com/Tacoman44444/AimTrainer-Backend/internal/response"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 
 	_ "github.com/lib/pq"
@@ -113,6 +115,74 @@ func (cfg *apiConfig) recieveSessionInfoHandler(w http.ResponseWriter, r *http.R
 
 }
 
+func (cfg *apiConfig) sendPersonalBestHandler(w http.ResponseWriter, r *http.Request) {
+	type Params struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	type Response struct {
+		Id        uuid.UUID `json:"id"`
+		Score     int       `json:"score"`
+		Accuracy  string    `json:"accuracy"`
+		CreatedAt time.Time `json:"created_at"`
+		PlayerId  uuid.UUID `json:"player_id"`
+	}
+	params := Params{}
+	resp := Response{}
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(&params)
+	if err != nil {
+		fmt.Println("ERROR: unable to decode JSON data")
+		fmt.Println(err)
+		response.RespondWithJSON(w, 500, "unable to decode JSON data")
+		return
+	}
+
+	userData, err := cfg.db.FindUserByUsername(r.Context(), params.Username)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			fmt.Println("ERROR: no user by this name")
+			fmt.Println(err)
+			response.RespondWithJSON(w, 400, "no user goes by "+params.Username)
+			return
+		}
+		fmt.Println("ERROR: could not execute SQL query!")
+		fmt.Println(err)
+		response.RespondWithJSON(w, 500, "could not execute SQL query")
+		return
+	}
+
+	err = auth.CheckPasswordHash(params.Password, userData.HashedPassword)
+	if err != nil {
+		fmt.Println("ERROR: incorrect password")
+		fmt.Println(err)
+		response.RespondWithJSON(w, 500, "incorrect password -- "+params.Password) //params.password only included for testing
+		return
+	}
+
+	session, err := cfg.db.GetPlayerBestSession(r.Context(), userData.ID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			fmt.Println("ERROR: user has no sessions")
+			fmt.Println(err)
+			response.RespondWithJSON(w, 400, "user has no sessions")
+			return
+		}
+		fmt.Println("ERROR: could not execute SQL query!")
+		fmt.Println(err)
+		response.RespondWithJSON(w, 500, "could not execute SQL query")
+		return
+	}
+
+	resp.Id = session.ID
+	resp.Score = int(session.Score)
+	resp.Accuracy = session.Accuracy
+	resp.CreatedAt = session.CreatedAt
+	resp.PlayerId = session.PlayerID
+
+	response.RespondWithJSON(w, 200, resp)
+}
+
 func main() {
 	godotenv.Load()
 	servMux := http.NewServeMux()
@@ -131,7 +201,7 @@ func main() {
 
 	servMux.HandleFunc("POST /api/users", currentState.recieveLoginInfoHandler)
 	servMux.HandleFunc("POST /api/sessions", currentState.recieveSessionInfoHandler)
-
+	servMux.HandleFunc("GET /api/sessions", currentState.sendPersonalBestHandler)
 	server := http.Server{}
 	server.Handler = servMux
 	server.Addr = ":8080"

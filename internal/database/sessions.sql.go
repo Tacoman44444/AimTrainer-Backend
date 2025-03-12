@@ -40,3 +40,23 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) (S
 	)
 	return i, err
 }
+
+const getPlayerBestSession = `-- name: GetPlayerBestSession :one
+SELECT id, score, accuracy, created_at, player_id FROM sessions
+WHERE player_id = $1
+ORDER BY score DESC
+LIMIT 1
+`
+
+func (q *Queries) GetPlayerBestSession(ctx context.Context, playerID uuid.UUID) (Session, error) {
+	row := q.db.QueryRowContext(ctx, getPlayerBestSession, playerID)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.Score,
+		&i.Accuracy,
+		&i.CreatedAt,
+		&i.PlayerID,
+	)
+	return i, err
+}
