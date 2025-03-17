@@ -13,3 +13,8 @@ SELECT * FROM sessions
 WHERE player_id = $1
 ORDER BY score DESC
 LIMIT 1;
+
+-- name: GetTopTenScores :many
+SELECT * FROM sessions
+ORDER BY score DESC, created_at DESC
+LIMIT 10;

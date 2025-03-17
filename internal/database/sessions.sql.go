@@ -60,3 +60,38 @@ func (q *Queries) GetPlayerBestSession(ctx context.Context, playerID uuid.UUID) 
 	)
 	return i, err
 }
+
+const getTopTenScores = `-- name: GetTopTenScores :many
+SELECT id, score, accuracy, created_at, player_id FROM sessions
+ORDER BY score DESC, created_at DESC
+LIMIT 10
+`
+
+func (q *Queries) GetTopTenScores(ctx context.Context) ([]Session, error) {
+	rows, err := q.db.QueryContext(ctx, getTopTenScores)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Session
+	for rows.Next() {
+		var i Session
+		if err := rows.Scan(
+			&i.ID,
+			&i.Score,
+			&i.Accuracy,
+			&i.CreatedAt,
+			&i.PlayerID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

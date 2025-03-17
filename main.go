@@ -183,6 +183,47 @@ func (cfg *apiConfig) sendPersonalBestHandler(w http.ResponseWriter, r *http.Req
 	response.RespondWithJSON(w, 200, resp)
 }
 
+func (cfg *apiConfig) sendLeaderboardHandler(w http.ResponseWriter, r *http.Request) {
+	type Session struct {
+		Id        uuid.UUID `json:"id"`
+		Score     int       `json:"score"`
+		Accuracy  string    `json:"accuracy"`
+		CreatedAt time.Time `json:"created_at"`
+		PlayerId  uuid.UUID `json:"player_id"`
+	}
+	type Response struct {
+		Sessions []Session `json:"sessions"`
+	}
+	resp := Response{}
+
+	sessions, err := cfg.db.GetTopTenScores(r.Context())
+	if err != nil {
+		if err == sql.ErrNoRows {
+			response.RespondWithJSON(w, 500, "sessions table contains no rows.")
+			fmt.Println("ERROR: sessions table contains no rows")
+			fmt.Println(err)
+			return
+		}
+		response.RespondWithJSON(w, 500, "could not execute SQL query")
+		fmt.Println("ERRORl could not execute SQL query")
+		fmt.Println(err)
+		return
+	}
+	respSessions := make([]Session, 0, len(sessions))
+	for i := 0; i < len(sessions); i++ {
+		session := Session{
+			Accuracy:  sessions[i].Accuracy,
+			CreatedAt: sessions[i].CreatedAt,
+			Id:        sessions[i].ID,
+			PlayerId:  sessions[i].PlayerID,
+			Score:     int(sessions[i].Score),
+		}
+		respSessions = append(respSessions, session)
+	}
+	resp.Sessions = respSessions
+	response.RespondWithJSON(w, 200, resp)
+}
+
 func main() {
 	godotenv.Load()
 	servMux := http.NewServeMux()
@@ -202,6 +243,8 @@ func main() {
 	servMux.HandleFunc("POST /api/users", currentState.recieveLoginInfoHandler)
 	servMux.HandleFunc("POST /api/sessions", currentState.recieveSessionInfoHandler)
 	servMux.HandleFunc("GET /api/sessions", currentState.sendPersonalBestHandler)
+	servMux.HandleFunc("GET /api/leaderboards", currentState.sendLeaderboardHandler)
+
 	server := http.Server{}
 	server.Handler = servMux
 	server.Addr = ":8080"
