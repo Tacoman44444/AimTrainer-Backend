@@ -7,6 +7,7 @@ package database
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -62,26 +63,44 @@ func (q *Queries) GetPlayerBestSession(ctx context.Context, playerID uuid.UUID) 
 }
 
 const getTopTenScores = `-- name: GetTopTenScores :many
-SELECT id, score, accuracy, created_at, player_id FROM sessions
-ORDER BY score DESC, created_at DESC
+SELECT sessions.id, score, accuracy, sessions.created_at, player_id, users.id, username, hashed_password, users.created_at FROM sessions
+INNER JOIN users
+ON sessions.player_id = users.id
+ORDER BY score DESC, sessions.created_at DESC
 LIMIT 10
 `
 
-func (q *Queries) GetTopTenScores(ctx context.Context) ([]Session, error) {
+type GetTopTenScoresRow struct {
+	ID             uuid.UUID
+	Score          int32
+	Accuracy       string
+	CreatedAt      time.Time
+	PlayerID       uuid.UUID
+	ID_2           uuid.UUID
+	Username       string
+	HashedPassword string
+	CreatedAt_2    time.Time
+}
+
+func (q *Queries) GetTopTenScores(ctx context.Context) ([]GetTopTenScoresRow, error) {
 	rows, err := q.db.QueryContext(ctx, getTopTenScores)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Session
+	var items []GetTopTenScoresRow
 	for rows.Next() {
-		var i Session
+		var i GetTopTenScoresRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Score,
 			&i.Accuracy,
 			&i.CreatedAt,
 			&i.PlayerID,
+			&i.ID_2,
+			&i.Username,
+			&i.HashedPassword,
+			&i.CreatedAt_2,
 		); err != nil {
 			return nil, err
 		}

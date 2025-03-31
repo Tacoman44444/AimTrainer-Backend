@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/Tacoman44444/AimTrainer-Backend/internal/auth"
@@ -45,25 +46,46 @@ func (cfg *apiConfig) recieveLoginInfoHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	_, err = cfg.db.CreateUser(r.Context(), database.CreateUserParams{
-		Username:       params.Username,
-		HashedPassword: hashedPassword,
-	})
+	userData, err := cfg.db.FindUserByUsername(r.Context(), params.Username)
+
 	if err != nil {
-		fmt.Println("ERROR: could not execute SQL query CreateUser")
+		if err != sql.ErrNoRows {
+			fmt.Println("ERROR: could not execute SQL query!")
+			fmt.Println(err)
+			response.RespondWithJSON(w, 500, "could not execute SQL query")
+		} else if err == sql.ErrNoRows {
+			_, err = cfg.db.CreateUser(r.Context(), database.CreateUserParams{
+				Username:       params.Username,
+				HashedPassword: hashedPassword,
+			})
+			if err != nil {
+				fmt.Println("ERROR: could not execute SQL query CreateUser")
+				fmt.Println(err)
+				response.RespondWithJSON(w, 500, "could not execute SQL query CreateUser")
+				return
+			}
+
+			response.RespondWithJSON(w, 201, "user created successfully!")
+		}
+	}
+
+	err = auth.CheckPasswordHash(params.Password, userData.HashedPassword)
+	if err != nil {
+		fmt.Println("ERROR: incorrect password")
 		fmt.Println(err)
-		response.RespondWithJSON(w, 500, "could not execute SQL query CreateUser")
+		response.RespondWithJSON(w, 500, "incorrect password -- "+params.Password) //params.password only included for testing
 		return
 	}
 
-	response.RespondWithJSON(w, 201, "user created successfully!")
+	response.RespondWithJSON(w, 201, "user authenticated successfully")
+
 }
 
 func (cfg *apiConfig) recieveSessionInfoHandler(w http.ResponseWriter, r *http.Request) {
 	type Params struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
-		Score    int    `json:"score"`
+		Score    string `json:"score"`
 		Accuracy string `json:"accuracy"`
 	}
 
@@ -98,9 +120,15 @@ func (cfg *apiConfig) recieveSessionInfoHandler(w http.ResponseWriter, r *http.R
 		response.RespondWithJSON(w, 500, "incorrect password -- "+params.Password) //params.password only included for testing
 		return
 	}
-
+	scr, err := strconv.Atoi(params.Score)
+	if err != nil {
+		fmt.Println("ERROR: issue in JSON data")
+		fmt.Println(err)
+		response.RespondWithJSON(w, 500, "issue in JSON data")
+	}
 	_, err = cfg.db.CreateSession(r.Context(), database.CreateSessionParams{
-		Score:    int32(params.Score),
+
+		Score:    int32(scr),
 		Accuracy: params.Accuracy,
 		PlayerID: userData.ID,
 	})
@@ -184,15 +212,13 @@ func (cfg *apiConfig) sendPersonalBestHandler(w http.ResponseWriter, r *http.Req
 }
 
 func (cfg *apiConfig) sendLeaderboardHandler(w http.ResponseWriter, r *http.Request) {
-	type Session struct {
-		Id        uuid.UUID `json:"id"`
-		Score     int       `json:"score"`
-		Accuracy  string    `json:"accuracy"`
-		CreatedAt time.Time `json:"created_at"`
-		PlayerId  uuid.UUID `json:"player_id"`
+	type LeaderboardEntry struct {
+		Username string `json:"username"`
+		Score    int    `json:"score"`
+		Accuracy string `json:"accuracy"`
 	}
 	type Response struct {
-		Sessions []Session `json:"sessions"`
+		Sessions []LeaderboardEntry `json:"sessions"`
 	}
 	resp := Response{}
 
@@ -209,14 +235,12 @@ func (cfg *apiConfig) sendLeaderboardHandler(w http.ResponseWriter, r *http.Requ
 		fmt.Println(err)
 		return
 	}
-	respSessions := make([]Session, 0, len(sessions))
+	respSessions := make([]LeaderboardEntry, 0, len(sessions))
 	for i := 0; i < len(sessions); i++ {
-		session := Session{
-			Accuracy:  sessions[i].Accuracy,
-			CreatedAt: sessions[i].CreatedAt,
-			Id:        sessions[i].ID,
-			PlayerId:  sessions[i].PlayerID,
-			Score:     int(sessions[i].Score),
+		session := LeaderboardEntry{
+			Username: sessions[i].Username,
+			Score:    int(sessions[i].Score),
+			Accuracy: sessions[i].Accuracy,
 		}
 		respSessions = append(respSessions, session)
 	}

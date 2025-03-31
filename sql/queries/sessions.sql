@@ -16,5 +16,7 @@ LIMIT 1;
 
 -- name: GetTopTenScores :many
 SELECT * FROM sessions
-ORDER BY score DESC, created_at DESC
+INNER JOIN users
+ON sessions.player_id = users.id
+ORDER BY score DESC, sessions.created_at DESC
 LIMIT 10;
